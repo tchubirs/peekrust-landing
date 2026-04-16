@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCHUBI // Automação AAA para servidores e streamers de Rust</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --bg-2: #111113;
+    --surface: #16161a;
+    --line: rgba(255, 255, 255, 0.06);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    --fg: #e8e8e8;
+    --fg-dim: #8a8a8a;
+    --fg-faint: #555;
+    --accent: #ff5a1f;
+    --accent-dim: #b33d10;
+    --warn: #facc15;
+    --ok: #4ade80;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-x: hidden;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,90,31,0.12), transparent 60%),
+      linear-gradient(180deg, transparent, rgba(255,90,31,0.02) 80%, transparent);
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    z-index: 100;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+  }
+
+  /* Scan lines */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 99;
+    background-image: repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 3px,
+      rgba(255,255,255,0.015) 3px,
+      rgba(255,255,255,0.015) 4px
+    );
+  }
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  /* --- NAV --- */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(12px);
+    background: rgba(10,10,11,0.7);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 64px;
+  }
+  .logo {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+  nav ul {
+    list-style: none;
+    display: flex;
+    gap: 32px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  nav ul a {
+    color: var(--fg-dim);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  nav ul a:hover { color: var(--accent); }
+  @media (max-width: 720px) { nav ul { display: none; } }
+
+  /* --- HERO --- */
+  .hero {
+    padding: 80px 0 120px;
+    position: relative;
+  }
+  .hero .tag {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    animation: fadeUp 0.6s 0.1s forwards;
+  }
+  .hero .tag::before {
+    content: '';
+    width: 28px;
+    height: 1px;
+    background: var(--accent);
+  }
+  .hero h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(38px, 7vw, 84px);
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    margin-bottom: 24px;
+    max-width: 14ch;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.25s forwards;
+  }
+  .hero h1 .accent {
+    color: var(--accent);
+    font-style: italic;
+  }
+  .hero p.sub {
+    font-size: 17px;
+    color: var(--fg-dim);
+    max-width: 60ch;
+    margin-bottom: 40px;
+    line-height: 1.5;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.4s forwards;
+  }
+  .cta-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.55s forwards;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+    color: var(--fg);
+    transition: all 0.2s;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn.primary {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .btn.primary:hover {
+    background: #ff7040;
+    box-shadow: 0 0 24px rgba(255,90,31,0.4);
+    transform: translateY(-2px);
+  }
+  .btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn::after {
+    content: '→';
+    transition: transform 0.2s;
+  }
+  .btn:hover::after { transform: translateX(4px); }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* --- STATS BAR --- */
+  .stats {
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 32px 0;
+    background: var(--bg-2);
+  }
+  .stats .container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+  }
+  @media (max-width: 720px) {
+    .stats .container { grid-template-columns: repeat(2, 1fr); }
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .stat-value {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 32px;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+  }
+  .stat-value .unit {
+    color: var(--accent);
+    font-size: 0.6em;
+    margin-left: 4px;
+  }
+  .stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--fg-faint);
+  }
+
+  /* --- SECTION HEADER --- */
+  .section {
+    padding: 120px 0;
+  }
+  .section-header {
+    margin-bottom: 64px;
+  }
+  .section-kicker {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-kicker::before {
+    content: '[ ]';
+    opacity: 0.6;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: clamp(32px, 5vw, 56px);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    max-width: 18ch;
+  }
+
+  /* --- SERVICES --- */
+  .services-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2px;
+    background: var(--line-strong);
+    border: 1px solid var(--line-strong);
+  }
+  @media (max-width: 720px) {
+    .services-grid { grid-template-columns: 1fr; }
+  }
+  .service {
+    background: var(--bg);
+    padding: 40px;
+    position: relative;
+    transition: background 0.3s;
+  }
+  .service:hover {
+    background: var(--surface);
+  }
+  .service:hover .service-arrow {
+    transform: translate(4px, -4px);
+    color: var(--accent);
+  }
+  .service-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+  }
+  .service-num {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 48px;
+    color: var(--fg-faint);
+    letter-spacing: -0.05em;
+    line-height: 1;
+  }
+  .service:hover .service-num {
+    color: var(--accent);
+  }
+  .service-arrow {
+    font-size: 24px;
+    color: var(--fg-faint);
+    transition: all 0.3s;
+  }
+  .service h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+  }
+  .service p {
+    color: var(--fg-dim);
+    margin-bottom: 24px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .service-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 20px;
+    border-top: 1px dashed var(--line-strong);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .service-meta .price {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .service-meta .tag {
+    color: var(--fg-faint);
+  }
+  .service-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .service-tags span {
+    font-size: 10px;
+    padding: 4px 10px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    color: var(--fg-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* --- PROOF --- */
+  .proof-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .proof-grid { grid-template-columns: 1fr; }
+  }
+  .proof-card {
+    border: 1px solid var(--line-strong);
+    padding: 32px;
+    background: linear-gradient(135deg, var(--bg-2), var(--bg));
+    position: relative;
+    overflow: hidden;
+  }
+  .proof-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 32px;
+    height: 1px;
+    background: var(--accent);
+  }
+  .proof-status {
+    font-size: 10px;
+    color: var(--ok);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .proof-status::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--ok);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--ok);
+  }
+  .proof-card h4 {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.01em;
+  }
+  .proof-card .metric {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 28px;
+    color: var(--accent);
+    margin: 16px 0 8px;
+    letter-spacing: -0.02em;
+  }
+  .proof-card p {
+    color: var(--fg-dim);
+    font-size: 13px;
+  }
+  .proof-card .tech {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 10px;
+    color: var(--fg-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+  }
+
+  /* --- PROCESS --- */
+  .process {
+    background: var(--bg-2);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .process-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    background: var(--line);
+  }
+  @media (max-width: 900px) {
+    .process-steps { grid-template-columns: repeat(2, 1fr); }
+  }
+  .step {
+    background: var(--bg-2);
+    padding: 40px 32px;
+  }
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    margin-bottom: 20px;
+  }
+  .step h4 {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    line-height: 1.1;
+  }
+  .step p {
+    color: var(--fg-dim);
+    font-size: 13px;
+  }
+
+  /* --- CONTACT --- */
+  .contact {
+    padding: 120px 0;
+    text-align: center;
+  }
+  .contact h2 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(36px, 6vw, 72px);
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    margin-bottom: 24px;
+    max-width: 16ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .contact h2 .accent { color: var(--accent); }
+  .contact p {
+    color: var(--fg-dim);
+    font-size: 16px;
+    margin-bottom: 40px;
+    max-width: 50ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .contact-channels {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .channel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 22px;
+    border: 1px solid var(--line-strong);
+    text-decoration: none;
+    color: var(--fg);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition: all 0.2s;
+  }
+  .channel:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  /* --- FOOTER --- */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 32px 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--fg-faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  footer .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  /* --- TERMINAL DETAIL --- */
+  .terminal-detail {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--fg-faint);
+    letter-spacing: 0.1em;
+    margin-bottom: 16px;
+  }
+  .terminal-detail .bracket { color: var(--accent); }
+
+  /* --- CROSSHAIR DECORATION --- */
+  .crosshair {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--accent);
+    opacity: 0.4;
+  }
+  .crosshair.tl { top: 8px; left: 8px; border-right: none; border-bottom: none; }
+  .crosshair.tr { top: 8px; right: 8px; border-left: none; border-bottom: none; }
+  .crosshair.bl { bottom: 8px; left: 8px; border-right: none; border-top: none; }
+  .crosshair.br { bottom: 8px; right: 8px; border-left: none; border-top: none; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <div class="logo">TCHUBI<span style="color:var(--accent);font-weight:300;margin-left:4px;">//</span></div>
+    <ul>
+      <li><a href="#services">Serviços</a></li>
+      <li><a href="#proof">Trabalhos</a></li>
+      <li><a href="#process">Como funciona</a></li>
+      <li><a href="#contact" style="color:var(--accent);">Contato →</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <div class="tag">SERVIÇOS PRO // BR + LATAM // DISPONÍVEL</div>
+    <h1>Automação <span class="accent">AAA</span> pra servidores e streamers de Rust.</h1>
+    <p class="sub">Plugins competitivos, integrações TikTok Live, clipes automáticos e bots que transformam seu servidor numa máquina de engajamento. Sem gambiarra, sem lag, sem exploit.</p>
+    <div class="cta-row">
+      <a href="#contact" class="btn primary">Solicitar orçamento</a>
+      <a href="#proof" class="btn">Ver trabalhos</a>
+    </div>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="container">
+    <div class="stat">
+      <div class="stat-value">9K<span class="unit">+</span></div>
+      <div class="stat-label">Linhas em produção</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">1000<span class="unit">+</span></div>
+      <div class="stat-label">Arenas simultâneas</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">3<span class="unit">x</span></div>
+      <div class="stat-label">Plataformas integradas</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">24<span class="unit">/7</span></div>
+      <div class="stat-label">Uptime em combate</div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="services">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-kicker">01 — SERVIÇOS</div>
+      <h2 class="section-title">O que eu construo<br>pra você.</h2>
+    </div>
+
+    <div class="services-grid">
+      <div class="service">
+        <div class="crosshair tl"></div>
+        <div class="crosshair br"></div>
+        <div class="service-top">
+          <div class="service-num">01</div>
+          <div class="service-arrow">↗</div>
+        </div>
+        <div class="service-tags">
+          <span>TikTok Live</span><span>Twitch</span><span>Kick</span>
+        </div>
+        <h3>Integração Live → Rust</h3>
+        <p>Gifts, subs e comandos do chat viram ações no servidor em tempo real. Dashboard React, backend Node, plugin Oxide, WebSocket. Viewer dá rosa? Cai um heli. Sub novo? Raid no inimigo.</p>
+        <div class="service-meta">
+          <span class="tag">Setup + Custom</span>
+          <span class="price">A partir de $200</span>
+        </div>
+      </div>
+
+      <div class="service">
+        <div class="crosshair tl"></div>
+        <div class="crosshair br"></div>
+        <div class="service-top">
+          <div class="service-num">02</div>
+          <div class="service-arrow">↗</div>
+        </div>
+        <div class="service-tags">
+          <span>1v1</span><span>FFA</span><span>ELO</span><span>Matchmaking</span>
+        </div>
+        <h3>Plugins competitivos</h3>
+        <p>Arena 1v1, FFA, ScrimElo, matchmaking smart. Network group isolation de verdade (não Reflection quebrada), anti-exploit, zero race condition. Código testado em produção.</p>
+        <div class="service-meta">
+          <span class="tag">Custom / Pronto</span>
+          <span class="price">A partir de $150</span>
+        </div>
+      </div>
+
+      <div class="service">
+        <div class="crosshair tl"></div>
+        <div class="crosshair br"></div>
+        <div class="service-top">
+          <div class="service-num">03</div>
+          <div class="service-arrow">↗</div>
+        </div>
+        <div class="service-tags">
+          <span>IA</span><span>TikTok</span><span>Shorts</span>
+        </div>
+        <h3>Clipes automáticos 24/7</h3>
+        <p>Bot detecta kills épicas, multis, clutches. Gera clipe, edita, sobe no TikTok e Shorts com legenda + música. Você joga, o bot posta. Funciona enquanto você dorme.</p>
+        <div class="service-meta">
+          <span class="tag">Setup + Mensal</span>
+          <span class="price">$100 + $30/mês</span>
+        </div>
+      </div>
+
+      <div class="service">
+        <div class="crosshair tl"></div>
+        <div class="crosshair br"></div>
+        <div class="service-top">
+          <div class="service-num">04</div>
+          <div class="service-arrow">↗</div>
+        </div>
+        <div class="service-tags">
+          <span>Discord</span><span>Moderação</span><span>Stats</span>
+        </div>
+        <h3>Bots Discord + IA</h3>
+        <p>Comandos custom, stats do servidor em tempo real, moderação com IA (Claude/GPT), alertas de raid, leaderboards. Integrado no seu servidor Rust via API.</p>
+        <div class="service-meta">
+          <span class="tag">Setup único</span>
+          <span class="price">A partir de $80</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="proof" style="background:var(--bg-2); border-top:1px solid var(--line); border-bottom:1px solid var(--line);">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-kicker">02 — TRABALHOS</div>
+      <h2 class="section-title">Sistemas em produção.</h2>
+    </div>
+
+    <div class="proof-grid">
+      <div class="proof-card">
+        <div class="proof-status">ONLINE / ESTÁVEL</div>
+        <h4>ArenaBase</h4>
+        <div class="metric">1000+ arenas</div>
+        <p>Stacking de 1000+ arenas nas mesmas coordenadas com isolamento perfeito de network group por jogador. Zero ghost walls, zero invisibilidade bugada.</p>
+        <div class="tech">C# / Oxide / Net.sv.CreateGroup</div>
+      </div>
+
+      <div class="proof-card">
+        <div class="proof-status">v3.0.0 / PRODUÇÃO</div>
+        <h4>ScrimElo1v1</h4>
+        <div class="metric">AAA-grade</div>
+        <p>Sistema 1v1 competitivo com ELO, matchmaking, anti-rollback teleport, forced visibility, hash de UI. Passou por reviews arquiteturais AAA.</p>
+        <div class="tech">C# / Oxide / Anti-exploit</div>
+      </div>
+
+      <div class="proof-card">
+        <div class="proof-status">BRIDGE / LIVE</div>
+        <h4>TikTok Live Bridge</h4>
+        <div class="metric">3 plataformas</div>
+        <p>Sistema completo que bridga TikTok Live, Twitch e Kick com servidor Rust. Mapeia gifts e subs em eventos tier 1-5. Dashboard React, backend Node, WebSocket.</p>
+        <div class="tech">React / Node / WS / Oxide</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section process" id="process">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-kicker">03 — PROCESSO</div>
+      <h2 class="section-title">Do briefing ao deploy em 4 passos.</h2>
+    </div>
+  </div>
+
+  <div class="process-steps">
+    <div class="step">
+      <div class="step-num">01 / BRIEFING</div>
+      <h4>Você me conta</h4>
+      <p>Discord ou DM. Você descreve o que precisa. Eu avalio escopo e mando proposta com prazo e valor.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02 / DESIGN</div>
+      <h4>Arquitetura</h4>
+      <p>Defino estrutura, dependências, pontos de integração. Zero surpresa depois. Você aprova antes de codar.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03 / BUILD</div>
+      <h4>Desenvolvimento</h4>
+      <p>Código limpo, testado, comentado. Atualizações em tempo real no Discord. Você vê o progresso.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">04 / DEPLOY</div>
+      <h4>Entrega</h4>
+      <p>Instalação no seu servidor, config inicial, documentação. 14 dias de suporte incluído pra ajustes.</p>
+    </div>
+  </div>
+</section>
+
+<section class="contact" id="contact">
+  <div class="container">
+    <div class="terminal-detail"><span class="bracket">&gt;</span> iniciar_contato.sh <span class="bracket">//</span> pronto_pra_operação</div>
+    <h2>Vamos construir algo <span class="accent">bem feito</span>.</h2>
+    <p>Me conta o que você precisa. Respondo em até 24h com escopo, prazo e orçamento. Sem papo furado.</p>
+    <div class="contact-channels">
+      <a href="#" class="channel">◈ Discord</a>
+      <a href="#" class="channel">◉ Twitter / X</a>
+      <a href="mailto:contato@tchubi.org" class="channel">✉ Email</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div>© 2026 TCHUBI // Rust Automation Lab</div>
+    <div>BR + LATAM // Português · Español</div>
+  </div>
+</footer>
+
+</body>
+</html>
